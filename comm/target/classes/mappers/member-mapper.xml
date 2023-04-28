@@ -142,7 +142,7 @@
 	 </select>
 	 
 	 <!-- 회원가입 -->
-	 <insert id="signUp" parameterType="member" <!-- vo타입은 생략가능 --> >
+	 <insert id="signUp" parameterType="member" ><!-- vo타입은 생략가능 --> 
 		INSERT INTO MEMBER_S VALUES(
 		SEQ_MEMBER_NO_S.NEXTVAL,
 		#{memberEmail},
