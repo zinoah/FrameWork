@@ -1,5 +1,7 @@
 package edu.kh.comm.member.model.service;
 
+import java.util.List;
+
 import edu.kh.comm.member.model.vo.Member;
 
 /* 
@@ -24,4 +26,33 @@ public interface MemberService {
 	 * @return loginMember
 	 */
 	public abstract Member login(Member inputMember);
+
+	/** 이메일 중복 검사
+	 * @param memberEmail
+	 * @return result
+	 */
+	public abstract int emailDupCheck(String memberEmail);
+
+	/** 닉네임 중복 검사
+	 * @param memberNick
+	 * @return result
+	 */
+	public abstract int nicknameDupCheck(String memberNickname);
+
+	/** 회원가입 
+	 * @param newMember
+	 * @return
+	 */
+	public abstract int signUp(Member inputMember);
+
+	/** 회원 1명조회
+	 * @param memberEmail
+	 * @return
+	 */
+	public abstract Member selectOne(String memberEmail);
+
+	/** 회원 전체 조회
+	 * @return
+	 */
+	public abstract List<Member> selectAll();
 }

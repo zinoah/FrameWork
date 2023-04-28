@@ -1,13 +1,25 @@
 package edu.kh.comm.member.controller;
 
+import java.util.List;
+
+import javax.servlet.http.Cookie;
+import javax.servlet.http.HttpServletRequest;
+import javax.servlet.http.HttpServletResponse;
+
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Controller;
+import org.springframework.ui.Model;
+import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.GetMapping;
-import org.springframework.web.bind.annotation.ModelAttribute;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.bind.annotation.ResponseBody;
+import org.springframework.web.bind.annotation.SessionAttributes;
+import org.springframework.web.bind.support.SessionStatus;
+import org.springframework.web.servlet.mvc.support.RedirectAttributes;
 
 import edu.kh.comm.member.model.service.MemberService;
 import edu.kh.comm.member.model.vo.Member;
@@ -25,6 +37,8 @@ import edu.kh.comm.member.model.vo.Member;
 
 @Controller // 생성된 bean이 Controller임을 명시 + bean등록
 @RequestMapping("/member") // localhost:8080/comm/member 이하의 요청을 처리하는 컨트롤
+@SessionAttributes({"loginMember"}) //Model에 추가된 값의 key와 어노테이션에 작성된 값이 같으면
+									// 해당 값을 session scope로 이동시키는 역할
 public class MemberController{
 	
 	private Logger logger = LoggerFactory.getLogger(MemberController.class);
@@ -123,7 +137,15 @@ public class MemberController{
 	// -VO 기본생성자
 	// -VO 필드에 대한 Setter 
 	@PostMapping("/login")
-	public String login(@ModelAttribute Member inputMember) {
+	public String login(/*@ModelAttribute*/ Member inputMember,
+						Model model,
+						RedirectAttributes ra,
+						HttpServletResponse resp,
+						HttpServletRequest req,
+						@RequestParam(value="saveId", required=false) String saveId){
+		
+		// 커맨드 객체
+		// @ModelAttribute 생략된 상태에서 파라미터가 필드에 세팅된 객체
 		
 		logger.info("로그인 기능 수행됨");
 		
@@ -131,14 +153,196 @@ public class MemberController{
 		Member loginMember = service.login(inputMember);
 		
 		
+		/*
+		 * Model : 데이터를 맵 형식(K:V) 형태로 담아 전달하는 용도의 객체
+		 * -> request, session을 대체하는 객체
+		 * 
+		 * - 기본 scope : request
+		 * - session scope로 변환하고 싶은 경우
+		 *   클래스 별로 @SessionAttributes를 작성하면 된다.
+		 *   
+		 * @SessionAttributes 미작성 -> request scope
+		 * 
+		 * */
+		if(loginMember != null) { //login 성공 시
+			model.addAttribute("loginMember", loginMember); // -> req.setAttribute("loginMember", loginMember);
+			
+			// 로그인 성공 시 무조건 쿠키 생성
+			// 단, 아이디 저장 체크 여부에 따라서 쿠키의 유지시간을 조정 
+			Cookie cookie =new Cookie("saveId", loginMember.getMemberEmail());
+			
+			if(saveId != null) {// 아이디 저장 체크 되었을 때
+				
+				cookie.setMaxAge(60 * 60 * 24 * 365);
+			}else { // 체크되지 않았을 때
+				cookie.setMaxAge(0); // 0초 -> 생성 되자마자 사라짐 == 쿠키삭제
+			}
+			
+			// 쿠키가 적용될 범위 (경로) 지정
+			cookie.setPath(req.getContextPath());
+			
+			// 쿠키를 응답 시 클라이언트에게 전달
+			resp.addCookie(cookie);
+			
+		}else {
+			//model.addAttribute("message", "아이디 또는 비밀번호가 일치하지 않습니다.");
+			
+			ra.addFlashAttribute("message", "아이디 또는 비밀번호가 일치하지 않습니다.");
+		}
+		
+		// redirect 시에도 request scope로 세팅된 데이터가 유지될 수 있도록 하는 방법을 
+		// Spring에서 제공해줌 
+		// -> RedirectAttributes 객체(컨트롤러 매개변수에 작성하면 사용 가능)
+		
+		
 		return "redirect:/";
 	}
+	
+	//로그아웃
+	@GetMapping("/logout")
+	public String logout(/*HttpSession session*/
+							SessionStatus status) {
+		
+		// * @SessionAttributes을 이용해서 session scope에 배치된 데이터는
+		// SessionStatus라는 별도 객체를 이용해야만 없앨 수 있다.
+		
+		// 로그아웃 == 세션을 없애는 것
+		logger.info("로그아웃 수행됨");
+		
+		//session.invalidate(); 기존 세션 무효화 방식으로는 X
+		
+		status.setComplete(); // 세션이 할 일이 완료됨 -> 없앰
+		
+		return "redirect:/"; // 메인페이지 재요청
+	}
+	
 	
 	// 회원 가입 화면 전환
 	@GetMapping("/signUp") //Get 방식 : /comm/member/signUp 요청
 	public String SignUp() {
 		return "member/signUp";
 	}
+	
+	
+	// 이메일 중복 검사
+	@ResponseBody // ajax 응답 시 사용!
+	@GetMapping("/emailDupCheck")
+//	public String emailDupCheck(@RequestParam("memberEmail") String memberEmail) { // 파라미터 key값과 저장하려는 변수 명이 같으면 생략 가능!!
+	public int emailDupCheck( String memberEmail) {
+		
+		
+		/*
+		컨트롤러에서 반환되는 값은 forward 또는 redirect를 위한 경로인 경우가 일반적
+	     -> 반환되는 값은 경로로 인식됨
+	    
+	    이를 해결하기 위한 어노테이션 `@ResponseBody`가 있음
+	    
+		`@ResponseBody` : 반환되는 값을 응답의 몸통(Body)에 추가하여
+		 					이전 요청 주소로 돌아감
+		 */
+		
+		
+		return service.emailDupCheck(memberEmail);
+	}
+	
+	// 닉네임 중복 검사
+	@ResponseBody
+	@GetMapping("/nicknameDupCheck")
+	public int nicknameDupCheck(String memberNickname) {
+		
+		return service.nicknameDupCheck(memberNickname);
+	}
+	
+	// 회원 가입
+	@PostMapping("/signUp")					
+	public String signUp(Member inputMember, RedirectAttributes ra, String[] memberAddress) {
+						// @ModelAttribute  생량가능한 이유
+						// name값이랑filed 값이랑 같을 경우
+		
+		
+		// 커맨드 객체를 이용해서 입력된 회원 정보를 잘 받아옴 
+		// 단, 같은 name을 가진 주소가 하나의 문자열로 합쳐서 세팅되어 들어옴.
+		// -> 도로명 주소에 "," 기호가 포함되는 경우가 있어 이를 구분자로 사용할 수 없다.
+		
+		
+		// String.join("구분자",배열)
+		// 배열을 하나의 문자열로 합치는 메서드
+		// 값 중간중간에 구분자가 들어가서 하나의 문자열로 합쳐줌
+		// [a,b,c] -> join 진행 -> "a,,b,,c" 
+		inputMember.setMemberAddress(String.join(",,", memberAddress));
+		
+		if(inputMember.getMemberAddress().equals(",,,,")) {// 주소가 입력되지 않은 경우
+			
+			inputMember.setMemberAddress(null); //null로 변환
+			
+		}
+		
+		// 회원 가입 서비스 호출 
+		int result = service.signUp(inputMember);
+		
+		String message = null; 
+		String path = null;
+		
+		if(result > 0) {//회원 가입 성공
+			message = "회원 가입 성공!!";
+			path = "redirect:/"; //메인펭이지
+		}else { // 실패
+			message = "회원 가입 실패ㅜㅜ";
+			path = "redirect:/member/signUp"; //회원 가입 페이지
+
+		}
+		
+		ra.addFlashAttribute("message",message);
+		
+		
+		return path;
+	}
+	
+	// 회원 1명 정보 조회 (ajax)
+	@ResponseBody
+	@PostMapping("/selectOne")
+	// 회원 1명 정보 조회(ajax)	
+	public Member selectOne(String memberEmail) {
+		
+		Member member = service.selectOne(memberEmail);
+		
+		return member;
+	}
+	
+	// 회원 목록 조회 (ajax)
+	@ResponseBody
+	@RequestMapping("/selectAll")
+	public List<Member> selectAll() {
+		
+		List<Member> list = service.selectAll();
+		
+		return list;
+	}
+	
+	/*
+	 * 스프링 예외 처리 방법 (3가지, 중복 사용 가능)
+	 * 
+	 * 1순위 : 메서드 별로 예외처리 (try-catch / throws)
+	 * 
+	 * 2순위 : 하나의 컨트롤러에서 발생하는 예외를 모아서 처리 
+	 * 				-> @ExeptionHandler(메서드에 작성)
+	 * 3 순위 : 전역 (웹 애플리케이션)에서 발생하는 예외를 모아서 처리 
+	 * 			-> ControllerAdvice (클래스에 작성)
+	 * 
+	 * */
+	
+	// 회원 컨트롤러에서 발생하는 모든 예외를 모아서 처리
+	
+//	@ExceptionHandler(Exception.class)
+//	public String exceptionHandler(Exception e, Model model) {
+//		e.printStackTrace();
+//		
+//		model.addAttribute("errorMessage", "서비스 이용 중 문제가 발생했습니다.");
+//		model.addAttribute("e", e);
+//		
+//		return "common/error";
+//		
+//	}
 	
 }
 
