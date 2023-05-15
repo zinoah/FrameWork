@@ -25,9 +25,14 @@
 	</appender>			
 	<!-- 날짜별 로그 파일 생성용 appender -->	
 	<appender name="dailyRollingFile"  class="org.apache.log4j.DailyRollingFileAppender">		
-	<param name="File"  value="C:\\workspace\\7_Framework\\comm\\logs\\runtime-log.log" />		
-	<param name="encoding" value="UTF-8" />		<param name="Append" value="true" />		
-	<param name="DatePattern" value="'.'yyyy-MM-dd"/>				<layout class="org.apache.log4j.PatternLayout">			<param name="ConversionPattern" value="%d{yyyy-MM-dd HH:mm:ss} [%p] %m%n" />		</layout>	</appender>
+		<param name="File"  value="C:\\workspace\\7_Framework\\comm\\logs\\runtime-log.log" />		
+		<param name="encoding" value="UTF-8" />
+		<param name="Append" value="true" />		
+		<param name="DatePattern" value="'.'yyyy-MM-dd"/>				
+		<layout class="org.apache.log4j.PatternLayout">			
+			<param name="ConversionPattern" value="%d{yyyy-MM-dd HH:mm:ss} [%p] %m%n" />		
+		</layout>	
+	</appender>
 	
 	<!-- Application Loggers -->
 	<!-- 이 패키지 이하에서 출력되는 로그들을 출력하겠다.
